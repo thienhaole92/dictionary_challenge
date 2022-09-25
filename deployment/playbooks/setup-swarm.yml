@@ -1,0 +1,5 @@
+---
+- hosts: managers
+  tasks:
+    - import_role:
+        name: swarm-managers

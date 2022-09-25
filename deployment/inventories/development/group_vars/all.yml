@@ -1,0 +1,20 @@
+---
+ansible_connection: ssh
+ansible_user: root
+ansible_ssh_private_key_file: /Users/haole/.ssh/dictapp
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+app_domain: omango.vn
+traefik_network_name: proxy
+traefik_acme_email: thienhaole92@gmail.com
+traefik_app_name: dashboard.dict
+api_app_name: api.dict
+web_app_name: dictionary
+traefik_admin_user: admin
+traefik_admin_password: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  66623836623561666534653466353663643534323665613835653166363337656135653738323833
+  6365643335373732313165313938343263646361316431390a366232363430636266623935363865
+  36323064633034663163363530356635633362356337616138376564316335663931323331653037
+  3465653461373533340a666262376332323061623530313032646431623863383834396334343165
+  6639
+

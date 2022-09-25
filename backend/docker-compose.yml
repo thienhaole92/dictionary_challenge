@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    ports:
+      - 4000:4000
+    restart: on-failure
+    networks:
+      - dict-app-network
+    environment:
+      - PORT=4000
+      - DB_NAME=dictionary.db
+
+networks:
+  dict-app-network:
+    driver: bridge

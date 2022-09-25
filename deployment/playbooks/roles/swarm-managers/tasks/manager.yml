@@ -1,0 +1,22 @@
+---
+- name: Check if Swarm has already been initialized
+  ansible.builtin.shell: docker node ls
+  register: swarm_status
+  ignore_errors: true
+
+- name: Retrieve manager token
+  ansible.builtin.debug:
+    msg:
+      - "Manager join token: {{ token }}"
+      - "Leader: {{ leader }}"
+  vars:
+    token: "{{ hostvars[groups['managers'][0]].manager_token.stdout }}"
+    leader: "{{ groups['managers'][0] }}"
+  when: inventory_hostname != groups['managers'][0]
+
+- name: Register node to Swarm cluster as manager
+  vars:
+    token: "{{ hostvars[groups['managers'][0]].manager_token.stdout }}"
+    leader: "{{ groups['managers'][0] }}"
+  ansible.builtin.shell: docker swarm join --token {{ token }} {{ leader }}:2377
+  when: swarm_status.rc != 0 and inventory_hostname != groups['managers'][0]

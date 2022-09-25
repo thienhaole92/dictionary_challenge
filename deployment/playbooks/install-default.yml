@@ -1,0 +1,15 @@
+---
+- hosts:
+    - managers
+  tasks:
+    - import_role:
+        name: host-defaults
+
+- hosts:
+    - managers
+  tasks:
+    - import_role:
+        name: docker
+
+
+

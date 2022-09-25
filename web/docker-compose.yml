@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        - DOMAIN=https://api.dict.omango.vn
+    ports:
+      - 3000:3000
+    restart: on-failure
+    networks:
+      - dict-app-network
+
+networks:
+  dict-app-network:
+    driver: bridge

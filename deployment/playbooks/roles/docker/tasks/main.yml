@@ -1,0 +1,57 @@
+---
+- name: Check if Docker is already installed
+  become: true
+  become_method: sudo
+  ansible.builtin.shell: docker --version
+  register: docker_status
+  ignore_errors: true
+
+- name: Check if keyrings folder exists
+  stat:
+    path: /etc/apt/keyrings
+  register: keyrings_folder_status
+
+- name: Create a directory for Docker official GPG key
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  when: not keyrings_folder_status.stat.exists
+
+- name: Check if Docker GPG key exists
+  stat:
+    path: /etc/apt/keyrings/docker.gpg
+  register: docker_gpg_key_status
+
+- name: Install Docker GPG key
+  ansible.builtin.shell: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  when: not docker_gpg_key_status.stat.exists
+
+- name: Set up repository
+  ansible.builtin.shell: |
+    echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  when: docker_status.rc != 0
+
+- name: Change Docker GPG key permissions
+  become: true
+  become_method: sudo
+  ansible.builtin.shell: chmod a+r /etc/apt/keyrings/docker.gpg
+  when: docker_status.rc != 0
+
+- name: Update cache
+  become: true
+  become_method: sudo
+  ansible.builtin.shell: apt update
+
+- name: Install the latest version of Docker Engine, containerd, and Docker Compose
+  ansible.builtin.apt:
+    pkg:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    force_apt_get: true
+    state: present
+  when: docker_status.rc != 0

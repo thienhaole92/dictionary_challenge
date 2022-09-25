@@ -1,0 +1,19 @@
+---
+- hosts:
+    - managers
+  tasks:
+    - name: Create a log directory if it does not exist
+      ansible.builtin.file:
+        path: "/var/log/traefik"
+        state: directory
+        mode: '0755'
+    - name: Create a cert directory if it does not exist
+      ansible.builtin.file:
+        path: "/var/traefik/cert"
+        state: directory
+        mode: '0755'
+        
+- hosts: managers
+  tasks:
+    - import_role:
+        name: traefik

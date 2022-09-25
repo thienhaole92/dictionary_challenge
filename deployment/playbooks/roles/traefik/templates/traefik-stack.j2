@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  socat:
+    image: alpine/socat:1.7.4.3-r1
+    command: tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - mgmt
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  traefik:
+    image: traefik:v2.8.3
+    command:
+      - --entryPoints.web.address=:80
+      - --entryPoints.websecure.address=:443
+
+      - --providers.docker=true
+      - --providers.docker.watch=true
+      - --providers.docker.swarmmode=true
+      - --providers.docker.network={{ traefik_network_name }}
+      - --providers.docker.endpoint=tcp://socat:2375
+      - --providers.docker.swarmModeRefreshSeconds=15s
+      - --providers.docker.exposedbydefault=false
+
+      - --api=true
+      - --api.dashboard=true
+      - --api.debug=true
+
+      # Create mechanism to generate certifiacte called "LE"
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email={{ traefik_acme_email }}
+      # Store obtained certificates on the given storage
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      # LetsEncrypt Staging Server - uncomment when testing
+      - --certificatesResolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
+
+      # Logging
+      - --accessLog=true
+      - --accessLog.format=json
+      - --accessLog.filePath=/var/log/access.log
+      - --accessLog.bufferingSize=100 # Configuring a buffer of 100 lines
+      - --accessLog.filters.statusCodes=204-299,400-499,500-599
+      - --accessLog.fields.headers.names.User-Agent=keep
+
+      # Try to enable this if something isn't working. Be careful in production as it exposes the traffic you might not want to expose.
+      - --log.level=DEBUG
+    networks:
+      - {{ traefik_network_name }}
+      - mgmt
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.t.rule=Host(`{{ traefik_app_name }}.{{ app_domain }}`)
+        - traefik.http.routers.t.service=api@internal
+        - traefik.http.routers.t.tls.certresolver=le
+        - traefik.http.routers.t.entrypoints=web,websecure
+        - traefik.http.services.t.loadbalancer.server.port=8080
+        - traefik.http.services.t.loadbalancer.passhostheader=true
+        - traefik.http.routers.t.middlewares=traefik-auth
+        - traefik.http.middlewares.traefik-auth.basicauth.users={{ traefikpassword.stdout }}
+
+        # Redirect all HTTP traffic to HTTPS
+        - traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)
+        - traefik.http.routers.http-catchall.entrypoints=web
+        - traefik.http.routers.http-catchall.middlewares=redirect-to-https
+
+        # Middleware redirect
+        - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+    volumes:
+      - cert:/letsencrypt
+      - /var/log/traefik:/var/log
+    depends_on:
+      - socat
+
+  api:
+    image: thienhaole92/dictapi:1.0.3
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.api.rule=Host(`{{ api_app_name }}.{{ app_domain }}`)
+        - traefik.http.routers.api.entrypoints=web,websecure
+        - traefik.http.routers.api.tls=true
+        - traefik.http.routers.api.tls.certresolver=le
+        - traefik.http.services.api.loadbalancer.server.port=4000
+        - traefik.http.routers.api.service=api
+        - traefik.docker.network={{ traefik_network_name }}
+    networks:
+      - {{ traefik_network_name }}
+    environment:
+      - PORT=4000
+      - DB_NAME=dictionary.db
+
+  web:
+    image: thienhaole92/dictapp:1.0.0
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.web.rule=Host(`{{ web_app_name }}.{{ app_domain }}`)
+        - traefik.http.routers.web.entrypoints=web,websecure
+        - traefik.http.routers.web.tls=true
+        - traefik.http.routers.web.tls.certresolver=le
+        - traefik.http.services.web.loadbalancer.server.port=3000
+        - traefik.http.routers.web.service=web
+        - traefik.docker.network={{ traefik_network_name }}
+    networks:
+      - {{ traefik_network_name }}
+
+volumes:
+  cert:
+
+networks:
+  {{ traefik_network_name }}:
+    driver: overlay
+    name: {{ traefik_network_name }}
+    attachable: true
+  mgmt:
+    driver: overlay
+    name: mgmt
+    attachable: true
+
